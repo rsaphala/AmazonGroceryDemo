@@ -1,10 +1,16 @@
 package com.example.grocery;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
 import com.example.grocery.adapter.CategoryAdapter;
@@ -13,6 +19,14 @@ import com.example.grocery.adapter.RecentlyViewedAdapter;
 import com.example.grocery.model.Category;
 import com.example.grocery.model.DiscountedProducts;
 import com.example.grocery.model.RecentlyViewed;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.firebase.dynamiclinks.FirebaseDynamicLinks;
+import com.google.firebase.dynamiclinks.PendingDynamicLinkData;
+import com.rudderstack.android.sdk.core.RudderClient;
+import com.rudderstack.android.sdk.core.RudderProperty;
+import com.rudderstack.android.sdk.core.RudderTraits;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -30,6 +44,42 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        RudderTraits traits = new RudderTraits();
+        String regisId = getRegisId();
+        traits.put("regisId", regisId);
+        traits.put("address", getAddress());
+        traits.put("installedFrom", getInstalledFrom());
+
+        RudderClient.with(this).identify(regisId, traits, null);
+
+
+
+        FirebaseDynamicLinks.getInstance()
+                .getDynamicLink(getIntent())
+                .addOnSuccessListener(this, new OnSuccessListener<PendingDynamicLinkData>() {
+                    @Override
+                    public void onSuccess(PendingDynamicLinkData pendingDynamicLinkData) {
+                        // Get deep link from result (may be null if no link is found)
+                        Uri deepLink = null;
+                        if (pendingDynamicLinkData != null) {
+                            deepLink = pendingDynamicLinkData.getLink();
+                            System.out.println("PROMO " + deepLink.toString());
+                            System.out.println("SOURCE " + deepLink.getQueryParameter("source"));
+                            write("installedFrom", deepLink.getQueryParameter("source"));
+                            RudderProperty p = new RudderProperty().putValue("campaignDynamicLinkId", deepLink.getQueryParameter("source"));
+                            RudderClient.with(getApplicationContext()).track("campaignDynamicLink", p);
+                        }
+
+
+                    }
+                })
+                .addOnFailureListener(this, new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        Log.w("fail", "getDynamicLink:onFailure", e);
+                    }
+                });
 
         discountedRecyclerView=findViewById(R.id.discountedRecycler);
         //adding data to model
@@ -83,6 +133,30 @@ public class MainActivity extends AppCompatActivity {
         recentlyViewedRecycler.setLayoutManager(layoutManager);
         recentlyViewedAdapter = new RecentlyViewedAdapter(this,recentlyViewedList);
         recentlyViewedRecycler.setAdapter(recentlyViewedAdapter);
+    }
+
+    private String getRegisId() {
+        SharedPreferences myPrefs = getSharedPreferences("app_config_aixp", Context.MODE_PRIVATE);
+        return myPrefs.getString("regisId", "");
+    }
+
+    private String getInstalledFrom() {
+        SharedPreferences myPrefs = getSharedPreferences("app_config_aixp", Context.MODE_PRIVATE);
+        return myPrefs.getString("installedFrom", "");
+    }
+
+    private void write(String key, String value) {
+        SharedPreferences sharedPref = getApplicationContext().getSharedPreferences("app_config_aixp", Context.MODE_PRIVATE);
+        SharedPreferences.Editor ed = sharedPref.edit();
+
+        //Indicate that the default shared prefs have been set
+        ed.putString(key, value);
+        ed.commit();
+    }
+
+    private String getAddress() {
+        SharedPreferences myPrefs = getSharedPreferences("app_config_aixp", Context.MODE_PRIVATE);
+        return myPrefs.getString("address", "");
     }
 
     private void setCategoryRecycler() {
