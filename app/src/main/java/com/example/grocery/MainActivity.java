@@ -1,5 +1,8 @@
 package com.example.grocery;
 
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -28,7 +31,10 @@ import com.rudderstack.android.sdk.core.RudderProperty;
 import com.rudderstack.android.sdk.core.RudderTraits;
 
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends AppCompatActivity {
     RecyclerView discountedRecyclerView, categoryRecyclerView , recentlyViewedRecycler;
@@ -63,12 +69,30 @@ public class MainActivity extends AppCompatActivity {
                         // Get deep link from result (may be null if no link is found)
                         Uri deepLink = null;
                         if (pendingDynamicLinkData != null) {
-                            deepLink = pendingDynamicLinkData.getLink();
-                            System.out.println("PROMO " + deepLink.toString());
-                            System.out.println("SOURCE " + deepLink.getQueryParameter("source"));
-                            write("installedFrom", deepLink.getQueryParameter("source"));
-                            RudderProperty p = new RudderProperty().putValue("campaignDynamicLinkId", deepLink.getQueryParameter("source"));
-                            RudderClient.with(getApplicationContext()).track("campaignDynamicLink", p);
+                            PackageManager pm = getApplicationContext().getPackageManager();
+                            try {
+                                PackageInfo pi = pm.getPackageInfo("com.aixp.amazongrocery", PackageManager.GET_META_DATA);
+                                Date d = new Date(pi.firstInstallTime);
+                                Date c = Calendar.getInstance().getTime();
+                                long diff = c.getTime() - d.getTime();
+                                long diffInSec = TimeUnit.MILLISECONDS.toSeconds(diff);
+
+                                System.out.println("Current DATE => " + c);
+                                System.out.println("DIFF DATE => " + diffInSec);
+                                System.out.println("INSTALL DATE " + d.toString());
+                                String applicationState = diffInSec > 180 ? "ALREADY INSTALLED" : "NEWLY INSTALLED";
+                                deepLink = pendingDynamicLinkData.getLink();
+                                System.out.println("PROMO DATE " + deepLink.toString());
+                                System.out.println("STATE DATE " + applicationState);
+                                System.out.println("SOURCE DATE " + deepLink.getQueryParameter("source"));
+                                write("installedFrom", deepLink.getQueryParameter("source"));
+                                RudderProperty p = new RudderProperty();
+                                p.putValue("campaignDynamicLinkId", deepLink.getQueryParameter("source"));
+                                p.putValue("campaignDynamicLinkMobileAppState", applicationState);
+                                RudderClient.with(getApplicationContext()).track("campaignDynamicLink", p);
+                            } catch (PackageManager.NameNotFoundException e) {
+                                Toast.makeText(getApplicationContext(), "Your device has not installed " , Toast.LENGTH_SHORT).show();
+                            }
                         }
 
 
